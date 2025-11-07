@@ -3,10 +3,10 @@
 A modern, full-stack e-commerce application built with React and Node.js, featuring a beautiful UI and seamless shopping experience.
 
 ![Home](https://github.com/anikethdjz/ShopHub/blob/main/home.png?raw=true)
-![Wish](c:\Users\anike\AppData\Local\Temp\wish.png)
+![Wish](https://github.com/anikethdjz/ShopHub/blob/main/wish.png?raw=true)
 ![Cart](https://github.com/anikethdjz/ShopHub/blob/main/cart.png?raw=true)
 ![Orders](https://github.com/anikethdjz/ShopHub/blob/main/order.png?raw=true)
-![Checkout](c:\Users\anike\AppData\Local\Temp\checkout.png)
+![Checkout](https://github.com/anikethdjz/ShopHub/blob/main/checkout.png?raw=true)
 
 ## ✨ Features
 
