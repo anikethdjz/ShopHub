@@ -78,6 +78,16 @@ router.put('/:id', async (req, res) => {
     res.json(item);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+router.delete('/clear', async (req, res) => {
+  try {
+    // clear cart for mock user only
+    await CartItem.deleteMany({ userId: MOCK_USER });
+    res.json({ message: 'Cart cleared successfully' });
+  } catch (err) {
+    console.error('Error clearing cart:', err);
+    res.status(500).json({ message: 'Failed to clear cart' });
+  }
+});
 
 router.delete('/:id', async (req, res) => {
   try {

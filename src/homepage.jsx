@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from './services/api';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, X, Plus, Minus, Trash2, Heart, Star, Search } from 'lucide-react';
+import logo from './assets/logo.svg';
+import CartContext from './context/CartContext';
 
 const STATIC_PRODUCTS = [
   { id: 1, name: 'Premium Wireless Headphones', price: 129.99, image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop', category: 'Electronics', rating: 4.5 },
@@ -20,7 +22,7 @@ const STATIC_PRODUCTS = [
 
 
 export default function ShoppingApp() {
-  const [cart, setCart] = useState([]);
+  const { cart, loadCart } = useContext(CartContext);
   const [showCart, setShowCart] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [wishlist, setWishlist] = useState([]);
@@ -31,30 +33,23 @@ export default function ShoppingApp() {
   useEffect(() => {
     async function load() {
       try {
-        const [pRes, cRes, wRes] = await Promise.all([
+        const [pRes, wRes] = await Promise.all([
           api.get('/products'),
-          api.get('/cart'),
           api.get('/wishlist')
         ]);
 
         console.log('Products from API:', pRes.data);
-        // Handle both direct array response and {value: [...]} response
         const backendProducts = Array.isArray(pRes.data) ? pRes.data : (pRes.data?.value || []);
         if (backendProducts.length > 0) {
           console.log(`Setting ${backendProducts.length} products from backend`);
           setProducts(backendProducts);
         }
 
-        const backendCartItems = cRes.data.items.map(it => ({
-          id: it.id,
-          ...it.product,
-          quantity: it.qty
-        }));
-        setCart(backendCartItems);
-
-        // keep wishlist items as { id: wishlistId, product: productObj }
         const wishlistItems = wRes.data.map(it => ({ id: it.id, product: it.product }));
         setWishlist(wishlistItems);
+
+        // load cart using context helper
+        await loadCart();
       } catch (err) {
         console.error('load error', err);
       }
@@ -67,7 +62,7 @@ const addToCart = async (product) => {
   try {
     console.log('Adding to cart:', product);
     let productId = product._id;
-    // If product has no _id (static fallback), try to find matching backend product by name
+  
     if (!productId) {
       const match = products.find(p => (p._id || p.id) && p.name === product.name);
       productId = match? (match._id || match.id) : null;
@@ -78,15 +73,8 @@ const addToCart = async (product) => {
     }
     const response = await api.post('/cart', { productId, qty: 1 });
     console.log('Cart add response:', response.data);
-    
-    const { data } = await api.get('/cart');
-    console.log('Updated cart:', data);
-    const backendCart = data.items.map(it => ({ 
-      id: it.id, 
-      ...it.product,
-      quantity: it.qty 
-    }));
-    setCart(backendCart);
+    // refresh cart via context
+    await loadCart();
   } catch (err) { 
     console.error('Add to cart error:', err); 
   }
@@ -95,14 +83,12 @@ const addToCart = async (product) => {
 const toggleWishlist = async (product) => {
   try {
     console.log('Toggle wishlist for product:', product);
-    // Ensure we have a backend product id to work with (map static product if needed)
     let targetProductId = product._id;
     if (!targetProductId) {
       const match = products.find(p => (p._id || p.id) && p.name === product.name);
       targetProductId = match? (match._id || match.id) : null;
     }
 
-    // Use MongoDB _id for comparison
     const exists = wishlist.find(w => {
       const wishlistProductId = w.product?._id;
       console.log('Comparing:', { wishlistProductId, targetProductId });
@@ -136,29 +122,26 @@ const updateQuantity = async (cartItemId, delta) => {
     } else {
       await api.put(`/cart/${cartItemId}`, { qty: newQty });
     }
-    const { data } = await api.get('/cart');
-    setCart(data.items.map(it => ({ id: it.id, ...it.product, quantity: it.qty })));
+    await loadCart();
   } catch (err) { console.error('updateQuantity error', err); }
 };
 
 const removeFromCart = async (cartItemId) => {
   await api.delete(`/cart/${cartItemId}`);
-  const { data } = await api.get('/cart');
-  setCart(data.items.map(it => ({ id: it.id, ...it.product, quantity: it.qty })));
+  await loadCart();
 };
 
 
   const getTotal = () => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2);
+    return (cart || []).reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2);
   };
 
   const getTotalItems = () => {
-    return cart.reduce((sum, item) => sum + item.quantity, 0);
+    return (cart || []).reduce((sum, item) => sum + item.quantity, 0);
   };
 
   const handleCheckout = () => {
-    // navigate to checkout route and pass cart via location state
-    navigate('/checkout', { state: { cart } });
+    navigate('/checkout');
   };
 
   const filteredProducts = products.filter(product =>
@@ -172,42 +155,52 @@ const removeFromCart = async (cartItemId) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center gap-3">
-              <div className="bg-emerald-500 p-2 rounded-lg">
-                <ShoppingCart className="text-white" size={28} />
-              </div>
+              <img src={logo} alt="ShopHub Logo" className="h-10 w-10" />
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">ShopHub</h1>
             </div>
             
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowWishlist(!showWishlist)}
-                className="relative text-gray-600 hover:text-emerald-500 transition"
-              >
-                <Heart size={24} />
-                {wishlist.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {wishlist.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setShowCart(!showCart)}
-                className="relative bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition shadow-md hover:shadow-lg"
-              >
-                <ShoppingCart size={20} />
-                <span className="hidden sm:inline font-medium">Cart</span>
-                {cart.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {getTotalItems()}
-                  </span>
-                )}
-              </button>
-              <button
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowWishlist(!showWishlist)}
+                  className="relative !bg-emerald-500 !hover:bg-emerald-600 p-2 rounded-full flex items-center justify-center transition-colors duration-200 shadow-md hover:shadow-lg"
+                >
+                  <Heart
+                    size={24}
+                    className="text-black hover:text-red-500 transition-colors duration-200"
+                  />
+                  {wishlist.length > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {wishlist.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setShowCart(!showCart)}
+                  className="relative !bg-emerald-500 !hover:bg-emerald-600 text-black px-4 py-2 rounded-lg flex items-center gap-2 transition-colors duration-200 shadow-md hover:shadow-lg"
+                >
+                  <ShoppingCart size={20} className="text-black" />
+                  <span className="hidden sm:inline font-medium">Cart</span>
+                  {cart.length > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {getTotalItems()}
+                    </span>
+                  )}
+                </button>
+                <button
+                    onClick={() => navigate('/orders')}
+                    className="!bg-emerald-500 !hover:bg-emerald-600 text-black px-4 py-2 rounded-lg font-medium transition-colors duration-200 shadow-md hover:shadow-lg"
+                  >
+                    Orders
+                  </button>
+
+
+                <button
                   onClick={() => alert('Login feature coming soon!')}
-                  className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition shadow-md hover:shadow-lg"
+                  className="!bg-emerald-500 !hover:bg-emerald-600 text-black px-4 py-2 rounded-lg font-medium transition-colors duration-200 shadow-md hover:shadow-lg"
                 >
                   Login
-              </button>
+                </button>
             </div>
           </div>
 
@@ -251,19 +244,19 @@ const removeFromCart = async (cartItemId) => {
                     </span>
                     <button
                       onClick={() => toggleWishlist(product)}
-                      className={`absolute top-3 right-3 bg-white p-2 rounded-full shadow-md transition ${
-                        wishlist.some(w => (w.product && (w.product._id || w.product.id)) === (product._id || product.id)) ? 'bg-red-100' : 'hover:bg-red-50'
-                      }`}
+                      className="absolute top-3 right-3 !bg-emerald-500 !hover:bg-emerald-600 p-2 rounded-full shadow-md flex items-center justify-center transition-colors duration-200"
                     >
                       <Heart
                         size={18}
                         className={`${
                           wishlist.some(w => (w.product && (w.product._id || w.product.id)) === (product._id || product.id))
                             ? 'text-red-500 fill-red-500'
-                            : 'text-gray-600 hover:text-red-500'
-                        }`}
+                            : 'text-black hover:text-red-500'
+                        } transition-colors duration-200`}
                       />
                     </button>
+
+
                   </div>
                   
                   <div className="p-5">
